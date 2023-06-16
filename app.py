@@ -97,3 +97,79 @@ with torch.no_grad():
 from sklearn.metrics import classification_report
 print(classification_report(labels_test, predicted_labels))
 
+# ----------------------------------------------------------------------------
+
+import torch
+import torch.nn as nn
+import torch.optim as optim
+from sklearn.model_selection import train_test_split
+
+# Step 1: Preprocess the data
+comments = data['comment']
+labels = data['label']
+
+# Tokenize the comments
+tokenizer = Tokenizer()
+tokenizer.fit_on_texts(comments)
+tokenized_comments = tokenizer.texts_to_sequences(comments)
+
+# Pad the tokenized comments to a fixed length
+max_length = max(len(comment) for comment in tokenized_comments)
+padded_comments = pad_sequences(tokenized_comments, maxlen=max_length)
+
+# Convert the data to PyTorch tensors
+input_data = torch.tensor(padded_comments)
+labels = torch.tensor(labels)
+
+# Step 2: Split the data
+input_train, input_test, labels_train, labels_test = train_test_split(input_data, labels, test_size=0.2, random_state=42)
+
+# Step 3: Define the RNN model
+class RNNClassifier(nn.Module):
+    def __init__(self, vocab_size, embedding_dim, hidden_dim, output_dim):
+        super(RNNClassifier, self).__init__()
+        self.embedding = nn.Embedding(vocab_size, embedding_dim)
+        self.rnn = nn.RNN(embedding_dim, hidden_dim, batch_first=True)
+        self.fc = nn.Linear(hidden_dim, output_dim)
+
+    def forward(self, x):
+        embedded = self.embedding(x)
+        _, hidden = self.rnn(embedded)
+        output = self.fc(hidden.squeeze(0))
+        return output
+
+vocab_size = len(tokenizer.word_index) + 1
+embedding_dim = 100
+hidden_dim = 128
+output_dim = 80
+
+model = RNNClassifier(vocab_size, embedding_dim, hidden_dim, output_dim)
+
+# Step 4: Train the model
+optimizer = optim.Adam(model.parameters())
+loss_fn = nn.CrossEntropyLoss()
+
+batch_size = 32
+num_epochs = 10
+
+for epoch in range(num_epochs):
+    for i in range(0, len(input_train), batch_size):
+        batch_input = input_train[i:i+batch_size]
+        batch_labels = labels_train[i:i+batch_size]
+
+        optimizer.zero_grad()
+        outputs = model(batch_input)
+        loss = loss_fn(outputs, batch_labels)
+        loss.backward()
+        optimizer.step()
+
+# Step 5: Evaluate the model
+model.eval()
+
+with torch.no_grad():
+    outputs = model(input_test)
+    predicted_labels = torch.argmax(outputs, dim=1).numpy()
+
+# Calculate evaluation metrics
+from sklearn.metrics import classification_report
+print(classification_report(labels_test, predicted_labels))
